@@ -65,8 +65,50 @@ function saveLocal() {
 /* ---------- Guardado (local o nube) ---------- */
 function cloudRef(id) { return fb.doc(fb.db, "users", user.uid, "tareas", id); }
 
+const REPITE = { diaria: "Diaria", semanal: "Semanal", quincenal: "Cada 15 días", mensual: "Mensual" };
+const ESPERA_ALERTA = 3; // días en espera antes de sugerir seguimiento
+
+function nextDate(fecha, repite) {
+  const d = new Date((fecha || todayStr()) + "T12:00:00");
+  const step = () => {
+    if (repite === "diaria") d.setDate(d.getDate() + 1);
+    else if (repite === "semanal") d.setDate(d.getDate() + 7);
+    else if (repite === "quincenal") d.setDate(d.getDate() + 14);
+    else if (repite === "mensual") {
+      const day = +((fecha || todayStr()).slice(8, 10));
+      d.setDate(1); d.setMonth(d.getMonth() + 1);
+      const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      d.setDate(Math.min(day, last));
+    }
+  };
+  step();
+  const td = todayStr();
+  while (dstr(d) <= td && repite !== "mensual") step();      // salta fechas ya pasadas
+  while (dstr(d) < td && repite === "mensual") step();
+  return dstr(d);
+}
+
 function writeTask(t) {
+  const old = tasks.find(x => x.id === t.id);
+  // Desde cuándo está esperando respuesta
+  if (t.estado === "espera") { if (!old || old.estado !== "espera" || !t.esperaDesde) t.esperaDesde = (old && old.estado === "espera" && old.esperaDesde) || Date.now(); }
+  else delete t.esperaDesde;
+  // Tarea que se repite: al terminarla se crea la siguiente
+  let siguiente = null;
+  if (t.repite && t.estado === "hecho" && (!old || old.estado !== "hecho")) {
+    const vence = nextDate(t.vence, t.repite);
+    siguiente = { ...t, id: newId(), creado: Date.now(), estado: "hacer", vence, top3: false,
+      checklist: (t.checklist || []).map(c => ({ t: c.t, ok: false })) };
+    delete siguiente.esperaDesde;
+  }
   t.actualizado = Date.now();
+  saveOne(t);
+  if (siguiente) {
+    saveOne(siguiente);
+    setTimeout(() => toast("↻ Próxima creada para el " + fmtDate(siguiente.vence)), 900);
+  }
+}
+function saveOne(t) {
   if (mode === "cloud") {
     const { id, ...body } = t;
     fb.setDoc(cloudRef(id), body).catch(e => toast(errMsg(e)));
@@ -254,6 +296,8 @@ function renderSync() {
 function render() {
   const td = todayStr(), d = new Date();
   $("#today").textContent = DIAS[d.getDay()].replace(/^./, c => c.toUpperCase()) + " " + d.getDate() + " de " + MESL[d.getMonth()];
+  const h = d.getHours();
+  $("#greet").textContent = h < 12 ? "Buenos días 👋" : h < 19 ? "Buenas tardes 👋" : "Buenas noches 👋";
   renderSync();
 
   // Aviso de copia (solo sin cuenta)
@@ -296,6 +340,18 @@ function render() {
     li.append(el("span", "n", String(i+1)), b); return li;
   }));
 
+  // Seguimientos pendientes
+  const late = tasks.filter(t => t.estado === "espera" && diasEsperando(t) >= ESPERA_ALERTA)
+    .sort((x, y) => diasEsperando(y) - diasEsperando(x));
+  $("#followBox").hidden = !late.length;
+  $("#followList").replaceChildren(...late.map(t => {
+    const li = el("li"); const who = el("button", "who link0"); who.type = "button"; who.onclick = () => openDlg(t);
+    who.append(t.titulo); const d = diasEsperando(t);
+    who.append(el("small", "", (t.esperaDe ? t.esperaDe + " · " : "") + "hace " + d + " días"));
+    const b = el("button", "follow", "Copiar seguimiento"); b.type = "button"; b.onclick = () => copyFollow(t);
+    li.append(who, b); return li;
+  }));
+
   // Columnas
   const list = filtered();
   const tabs = $("#tabs"); tabs.replaceChildren();
@@ -325,7 +381,7 @@ function render() {
 
 function card(t) {
   const ds = dueState(t);
-  const c = el("article", "card " + ds + (t.estado === "hecho" ? " done" : ""));
+  const c = el("article", "card s-" + (t.estado || "hacer") + " " + ds + (t.estado === "hecho" ? " done" : ""));
   const title = el("button", "t", t.titulo || "(sin título)"); title.type = "button"; title.onclick = () => openDlg(t);
   c.append(title);
 
@@ -335,10 +391,52 @@ function card(t) {
   bars.append(el("i"), el("i"), el("i")); meta.append(bars);
   if (t.proyecto) meta.append(el("span", "chip proj", t.proyecto));
   if (t.vence) meta.append(el("span", "chip date " + ds, (ds === "overdue" ? "Venció " : ds === "today" ? "Hoy · " : "") + fmtDate(t.vence)));
+  if (t.repite && REPITE[t.repite]) meta.append(el("span", "chip rep", "↻ " + REPITE[t.repite]));
   if (t.solicitante) meta.append(el("span", "chip", "Pidió: " + t.solicitante));
   c.append(meta);
 
-  if (t.estado === "espera" && t.esperaDe) c.append(el("div", "wait", "Esperando a " + t.esperaDe));
+  // Pasos
+  const cl = Array.isArray(t.checklist) ? t.checklist : [];
+  if (cl.length) {
+    const done = cl.filter(x => x.ok).length;
+    const box = el("div", "steps");
+    const head = el("button", "steps-head"); head.type = "button";
+    head.setAttribute("aria-expanded", String(openSteps.has(t.id)));
+    const bar = el("span", "prog"); const fill = el("i"); fill.style.width = Math.round(done / cl.length * 100) + "%"; bar.append(fill);
+    head.append(el("span", "steps-n", done + "/" + cl.length + " pasos"), bar, el("span", "chev", openSteps.has(t.id) ? "▴" : "▾"));
+    head.onclick = () => { openSteps.has(t.id) ? openSteps.delete(t.id) : openSteps.add(t.id); render(); };
+    box.append(head);
+    if (openSteps.has(t.id)) {
+      const ul = el("ul", "steps-list");
+      cl.forEach((s, k) => {
+        const li = el("li", s.ok ? "ok" : "");
+        const lb = el("label"); const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!s.ok;
+        cb.onchange = () => {
+          const checklist = cl.map((x, j) => j === k ? { ...x, ok: cb.checked } : x);
+          writeTask({ ...t, checklist });
+          if (checklist.every(x => x.ok) && t.estado !== "hecho") toast("¡Todos los pasos listos! Ya puedes marcarla como Hecho.");
+        };
+        lb.append(cb, el("span", "", s.t)); li.append(lb); ul.append(li);
+      });
+      box.append(ul);
+    }
+    c.append(box);
+  }
+
+  // Esperando respuesta: días y seguimiento
+  if (t.estado === "espera") {
+    const dias = diasEsperando(t);
+    const late = dias >= ESPERA_ALERTA;
+    const w = el("div", "wait" + (late ? " late" : ""));
+    const txt = el("span", "", (t.esperaDe ? "Esperando a " + t.esperaDe : "Esperando respuesta") + " · " + (dias === 0 ? "desde hoy" : "hace " + dias + " día" + (dias > 1 ? "s" : "")));
+    w.append(txt);
+    if (late) {
+      const fb2 = el("button", "follow", "Copiar mensaje de seguimiento"); fb2.type = "button";
+      fb2.onclick = () => copyFollow(t);
+      w.append(fb2);
+    }
+    c.append(w);
+  }
   if (t.siguiente && t.estado !== "hecho") { const n = el("div", "next"); n.append(el("strong", "", "Siguiente: "), t.siguiente); c.append(n); }
 
   const a = el("div", "actions");
@@ -359,6 +457,34 @@ function card(t) {
   return c;
 }
 const short = id => ({ hacer: "Por hacer", curso: "En curso", espera: "Esperando", hecho: "Hecho" })[id];
+const openSteps = new Set();
+
+function diasEsperando(t) {
+  const desde = t.esperaDesde || t.actualizado || Date.now();
+  const a = new Date(desde); a.setHours(0, 0, 0, 0);
+  const b = new Date(); b.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.round((b - a) / 864e5));
+}
+function followText(t) {
+  const h = new Date().getHours();
+  const saludo = h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches";
+  const quien = t.esperaDe ? " " + t.esperaDe : "";
+  const dias = diasEsperando(t);
+  return saludo + quien + ", te escribo para hacer seguimiento a \"" + t.titulo + "\"" + (t.proyecto ? " (" + t.proyecto + ")" : "") + ". "
+    + "Lo solicité hace " + dias + " día" + (dias !== 1 ? "s" : "") + " y lo necesito para continuar"
+    + (t.vence ? ", ya que la fecha límite es el " + fmtDate(t.vence) : "") + ". "
+    + "¿Me podrías confirmar cuándo podría tenerlo? Muchas gracias.";
+}
+async function copyFollow(t) {
+  const text = followText(t);
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) {
+    const ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.append(ta); ta.select(); try { document.execCommand("copy"); } catch (e2) {} ta.remove();
+  }
+  writeTask({ ...t, ultimoSeguimiento: Date.now() });
+  toast("Mensaje copiado. Pégalo en tu correo o WhatsApp.");
+}
 
 function move(t, estado) {
   const n = { ...t, estado };
@@ -463,7 +589,36 @@ $("#calGoogle").onclick = calGoogle;
 $("#calClose").onclick = () => $("#calDlg").close();
 
 /* ---------- Diálogo ---------- */
-const F = ["titulo","proyecto","solicitante","vence","prioridad","estado","esperaDe","siguiente","hora","aviso"];
+function syncDraftSteps() {
+  document.querySelectorAll("#stepsEd li").forEach((li, k) => {
+    if (!draftSteps[k]) return;
+    draftSteps[k].t = li.querySelector(".field").value;
+    draftSteps[k].ok = li.querySelector("input[type=checkbox]").checked;
+  });
+  const pend = $("#stepNew").value.trim();
+  if (pend) { draftSteps.push({ t: pend, ok: false }); $("#stepNew").value = ""; }
+}
+function renderSteps() {
+  const ul = $("#stepsEd");
+  ul.replaceChildren(...draftSteps.map((s, k) => {
+    const li = el("li");
+    const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!s.ok; cb.setAttribute("aria-label", "Paso listo");
+    const tx = document.createElement("input"); tx.className = "field"; tx.value = s.t; tx.maxLength = 120; tx.setAttribute("aria-label", "Paso " + (k + 1));
+    const x = el("button", "x", "✕"); x.type = "button"; x.setAttribute("aria-label", "Quitar paso");
+    x.onclick = () => { syncDraftSteps(); draftSteps.splice(k, 1); renderSteps(); };
+    li.append(cb, tx, x); return li;
+  }));
+  const done = draftSteps.filter(x => x.ok).length;
+  $("#stepsCount").textContent = draftSteps.length ? "(" + done + "/" + draftSteps.length + ")" : "";
+}
+function addStep() {
+  const v = $("#stepNew").value.trim(); if (!v) return;
+  syncDraftSteps(); renderSteps(); $("#stepNew").focus();
+}
+$("#stepAddBtn").onclick = addStep;
+$("#stepNew").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addStep(); } });
+const F = ["titulo","proyecto","solicitante","vence","prioridad","estado","esperaDe","siguiente","hora","aviso","repite"];
+let draftSteps = [];
 function openDlg(t) {
   editingId = t ? t.id : null;
   $("#dlgTitle").textContent = t ? "Editar tarea" : "Nueva tarea";
@@ -473,6 +628,8 @@ function openDlg(t) {
   $("#f_top3").checked = !!(t && t.top3);
   $("#f_hora").value = (t && t.hora) || "09:00";
   $("#f_aviso").value = String((t && t.aviso) || 0);
+  draftSteps = (t && Array.isArray(t.checklist) ? t.checklist : []).map(x => ({ ...x }));
+  $("#stepNew").value = ""; renderSteps();
   $("#delBtn").hidden = !t;
   $("#confirmDel").hidden = true;
   $("#dlg").showModal();
@@ -496,6 +653,8 @@ function saveForm() {
   for (const f of F) n[f] = $("#f_" + f).value.trim();
   n.prioridad = +n.prioridad || 2;
   n.aviso = +n.aviso || 0;
+  syncDraftSteps();
+  n.checklist = draftSteps.filter(x => x.t.trim()).map(x => ({ t: x.t.trim(), ok: !!x.ok }));
   n.top3 = $("#f_top3").checked && n.estado !== "hecho";
   if (!n.titulo) return null;
   if (n.top3 && !base.top3 && tasks.filter(x => x.top3 && x.estado !== "hecho" && x.id !== n.id).length >= 3) {

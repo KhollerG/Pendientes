@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-title" content="Pendientes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap">
 <style>
 /* Layout: resumen arriba, luego tablero kanban de 4 columnas (pestañas en el celular). */
 :root {
@@ -168,22 +168,195 @@ textarea.field { resize: vertical; min-height: 60px }
 .calinfo { margin: 0; font-weight: 600; overflow-wrap: anywhere }
 .calinfo small { display: block; font-weight: 400; color: var(--muted); font-family: var(--f-mono); margin-top: 2px }
 .calnote { margin: 0; font-size: .82rem; color: var(--muted) }
+
+/* ===== Estilo amigable v2 ===== */
+:root {
+  --bg: #eef3f6; --surface: #ffffff; --surface-2: #e4ebf0; --line: #cfdae2; --line-strong: #b6c6d2;
+  --fg: #1b2a36; --muted: #5d6f7d;
+  --accent: #0e7c86; --accent-2: #12a1a8; --accent-soft: #dcf1f2;
+  --c-hacer: #4b6fd6; --c-curso: #0e8f99; --c-espera: #c98510; --c-hecho: #2f9a58;
+  --c-hacer-soft: #e3eafb; --c-curso-soft: #dcf2f3; --c-espera-soft: #fbefd8; --c-hecho-soft: #def2e5;
+  --radius: 16px; --radius-sm: 12px;
+  --shadow: 0 1px 0 rgba(27,42,54,.04), 0 4px 14px rgba(27,42,54,.06);
+  --f-sans: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e151b; --surface: #172129; --surface-2: #1e2a34; --line: #2c3a46; --line-strong: #3b4c5a;
+  --fg: #e6eef3; --muted: #97a8b5; --accent: #3cc3cb; --accent-2: #2aa8b0; --accent-soft: #163a3e;
+  --c-hacer: #8aa6f2; --c-curso: #45c7cf; --c-espera: #e9b04f; --c-hecho: #6fcf93;
+  --c-hacer-soft: #1f2a46; --c-curso-soft: #143438; --c-espera-soft: #3a2d14; --c-hecho-soft: #17321f;
+  --shadow: 0 1px 0 rgba(0,0,0,.2), 0 4px 14px rgba(0,0,0,.25) } }
+:root[data-theme="dark"] {
+  --bg: #0e151b; --surface: #172129; --surface-2: #1e2a34; --line: #2c3a46; --line-strong: #3b4c5a;
+  --fg: #e6eef3; --muted: #97a8b5; --accent: #3cc3cb; --accent-2: #2aa8b0; --accent-soft: #163a3e;
+  --c-hacer: #8aa6f2; --c-curso: #45c7cf; --c-espera: #e9b04f; --c-hecho: #6fcf93;
+  --c-hacer-soft: #1f2a46; --c-curso-soft: #143438; --c-espera-soft: #3a2d14; --c-hecho-soft: #17321f;
+  --shadow: 0 1px 0 rgba(0,0,0,.2), 0 4px 14px rgba(0,0,0,.25) }
+
+body { font-size: 15.5px; font-variant-numeric: tabular-nums }
+.wrap { gap: 16px; max-width: 1280px }
+
+/* Cabecera */
+header.top { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-radius: 22px; padding: 20px 20px 18px; align-items: center; box-shadow: var(--shadow) }
+.hello h1 { font-size: 1.9rem; font-weight: 800; letter-spacing: -.01em; color: #fff }
+.greet { margin: 0; font-weight: 700; opacity: .9; font-size: .95rem }
+header.top .sub { color: rgba(255,255,255,.85); font-weight: 600 }
+header.top .sync { color: rgba(255,255,255,.9) }
+header.top .link { color: #fff }
+.btn { border: 1.5px solid var(--line-strong); border-radius: var(--radius-sm); padding: 10px 16px; font-weight: 700; min-height: 44px }
+.btn.ghost { background: rgba(255,255,255,.15); border-color: rgba(255,255,255,.5); color: #fff }
+.btn.add { background: #fff; color: var(--accent); border: 0; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.15) }
+.btn.add .plus { font-size: 1.4rem; line-height: 1; font-weight: 800 }
+.btn.primary { border-radius: var(--radius-sm) }
+@media (max-width: 520px) {
+  .topbtns { width: auto }
+  .topbtns .btn { flex: 0 0 auto }
+  .btn.add { position: fixed; z-index: 15; right: max(18px, env(safe-area-inset-right, 0px)); bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    width: 60px; height: 60px; border-radius: 50%; justify-content: center; padding: 0; background: var(--accent); color: #fff; box-shadow: 0 8px 22px rgba(14,124,134,.45) }
+  .btn.add .lbl { display: none }
+  .btn.add .plus { font-size: 2rem }
+  .wrap { padding-block: calc(14px + env(safe-area-inset-top, 0px)) calc(100px + env(safe-area-inset-bottom, 0px)) }
+}
+
+/* Resumen */
+.stats { gap: 10px }
+.stat { border: 1.5px solid var(--line); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); gap: 4px; position: relative; overflow: hidden }
+.stat::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--line-strong) }
+.stat.danger::before { background: var(--danger) } .stat.warn::before { background: var(--warn) } .stat.ok::before { background: var(--ok) }
+.stat b { font-family: var(--f-sans); font-size: 1.7rem; font-weight: 800 }
+.stat span { font-size: .72rem; font-weight: 700 }
+.stat[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft) }
+
+/* Top 3 */
+.top3 { border: 1.5px solid var(--star); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); background: linear-gradient(0deg, var(--surface), var(--surface)) }
+.top3 h2 { color: var(--star); font-weight: 800 }
+.top3 li { align-items: center; padding: 8px 10px; border: 1.5px solid var(--line); border-radius: var(--radius-sm) }
+.top3 li .n { width: 26px; height: 26px; border-radius: 50%; background: var(--star); color: var(--surface); display: grid; place-items: center; font-family: var(--f-sans); font-weight: 800; flex: none; font-size: .85rem }
+.top3 li button { font-weight: 700 }
+
+/* Filtros y campos */
+.field { border: 1.5px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; min-height: 44px }
+.field:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft) }
+.note { border: 1.5px solid var(--warn); border-radius: var(--radius-sm) }
+
+/* Pestañas por estado */
+.tabs { background: var(--surface); border: 1.5px solid var(--line); padding: 5px; border-radius: 16px; gap: 4px }
+.tabs button { border-radius: 11px; padding: 9px 4px; font-weight: 700; font-size: .8rem; display: flex; flex-direction: column; align-items: center; gap: 2px }
+.tabs .c { font-family: var(--f-sans); font-weight: 800; font-size: .95rem; margin: 0 }
+.tabs button:nth-child(1) .c { color: var(--c-hacer) } .tabs button:nth-child(2) .c { color: var(--c-curso) }
+.tabs button:nth-child(3) .c { color: var(--c-espera) } .tabs button:nth-child(4) .c { color: var(--c-hecho) }
+.tabs button[aria-selected="true"] { box-shadow: none; color: var(--fg) }
+.tabs button:nth-child(1)[aria-selected="true"] { background: var(--c-hacer-soft) }
+.tabs button:nth-child(2)[aria-selected="true"] { background: var(--c-curso-soft) }
+.tabs button:nth-child(3)[aria-selected="true"] { background: var(--c-espera-soft) }
+.tabs button:nth-child(4)[aria-selected="true"] { background: var(--c-hecho-soft) }
+
+/* Columnas */
+.board { gap: 14px }
+.col { background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 18px; padding: 12px; gap: 10px }
+.col-head h2 { display: flex; align-items: center; gap: 8px; font-weight: 800; color: var(--fg); font-size: .8rem }
+.col-head h2::before { content: ""; width: 10px; height: 10px; border-radius: 50% }
+.board .col:nth-child(1) .col-head h2::before { background: var(--c-hacer) }
+.board .col:nth-child(2) .col-head h2::before { background: var(--c-curso) }
+.board .col:nth-child(3) .col-head h2::before { background: var(--c-espera) }
+.board .col:nth-child(4) .col-head h2::before { background: var(--c-hecho) }
+.col-head .c { font-family: var(--f-sans); font-weight: 800; background: var(--surface); border: 1.5px solid var(--line); border-radius: 999px; padding: 0 9px }
+.list { gap: 10px }
+.empty { border: 2px dashed var(--line-strong); border-radius: var(--radius); padding: 22px 12px; font-weight: 600 }
+@media (max-width: 899px) { .col { border: 0; background: none; padding: 0 } }
+
+/* Tarjetas */
+.card { border: 1.5px solid var(--line); border-left: 6px solid var(--c-hacer); border-radius: var(--radius); padding: 13px 14px; gap: 9px }
+.card.s-curso { border-left-color: var(--c-curso) }
+.card.s-espera { border-left-color: var(--c-espera) }
+.card.s-hecho { border-left-color: var(--c-hecho); opacity: .85 }
+.card.overdue { border-color: var(--danger); border-left: 6px solid var(--c-hacer) }
+.card.overdue.s-curso { border-left-color: var(--c-curso) } .card.overdue.s-espera { border-left-color: var(--c-espera) }
+.card.today { border-left-width: 6px; border-color: var(--warn) }
+.card.today.s-hacer { border-left-color: var(--c-hacer) } .card.today.s-curso { border-left-color: var(--c-curso) } .card.today.s-espera { border-left-color: var(--c-espera) }
+.card .t { font-weight: 800; font-size: 1.02rem }
+.chip { padding: 3px 10px; font-weight: 700; border: 1.5px solid transparent }
+.chip.proj { border-color: color-mix(in srgb, var(--accent) 35%, transparent) }
+.chip.date { font-family: var(--f-sans) }
+.chip.date.overdue { border-color: var(--danger) } .chip.date.today { border-color: var(--warn) }
+.next { background: var(--surface-2); border-radius: 10px; padding: 7px 10px; color: var(--fg) }
+.next strong { font-weight: 800 }
+.wait { font-weight: 700; background: var(--c-espera-soft); border-radius: 10px; padding: 6px 10px; color: var(--c-espera) }
+.bars i { width: 4px }
+.actions { padding-top: 9px; border-top: 1.5px dashed var(--line) }
+.icon { border: 1.5px solid var(--line-strong); border-radius: 10px; min-width: 40px; height: 38px; font-weight: 700; color: var(--fg) }
+.actions > .mv:last-child .icon:last-child { background: var(--accent-soft); border-color: var(--accent); color: var(--accent) }
+.icon { white-space: nowrap; font-size: .8rem } .actions { flex-wrap: wrap; row-gap: 6px } .actions .mv:last-child { margin-left: auto }
+.card.s-espera .actions .mv:last-child .icon:last-child { background: var(--c-hecho-soft); border-color: var(--c-hecho); color: var(--c-hecho) }
+
+/* Diálogos: hoja desde abajo en el celular */
+dialog { border: 1.5px solid var(--line); border-radius: 22px }
+dialog h3 { font-weight: 800; font-size: 1.2rem }
+label.lb { font-weight: 700 }
+@media (max-width: 520px) {
+  dialog { width: 100%; max-width: 100%; margin: auto 0 0; border-radius: 22px 22px 0 0; border-bottom: 0 }
+  dialog form, .calform { padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)) }
+}
+.btn.cal { border: 1.5px dashed var(--accent); background: var(--accent-soft) }
+
+/* Pie */
+.foot { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; border: 1.5px solid var(--line); border-radius: var(--radius); padding: 12px 14px; background: var(--surface); color: var(--muted); font-weight: 700; font-size: .9rem }
+.footbtns { display: flex; gap: 8px }
+.toast { border-radius: 14px; font-weight: 700 }
+@media (max-width: 520px) { .toast { bottom: calc(92px + env(safe-area-inset-bottom, 0px)) } }
+@media (prefers-reduced-motion: no-preference) {
+  .card { transition: transform .12s, box-shadow .12s } .card:active { transform: scale(.99) }
+  .btn, .icon { transition: transform .1s } .btn:active, .icon:active { transform: scale(.96) }
+}
+
+/* Pasos */
+.steps { display: grid; gap: 6px }
+.steps-head { display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 2px 0; text-align: left; width: 100% }
+.steps-n { font-weight: 800; font-size: .82rem; white-space: nowrap }
+.prog { flex: 1; height: 8px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; overflow: hidden }
+.prog i { display: block; height: 100%; background: var(--c-hecho); border-radius: 999px }
+.chev { color: var(--muted); font-size: .8rem }
+.steps-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px }
+.steps-list label { display: flex; gap: 10px; align-items: center; padding: 7px 10px; border: 1.5px solid var(--line); border-radius: 10px; font-size: .9rem; font-weight: 600; cursor: pointer }
+.steps-list li.ok label { color: var(--muted); text-decoration: line-through; background: var(--c-hecho-soft); border-color: transparent }
+.steps-list input, .steps-ed input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--c-hecho); flex: none }
+.chip.rep { background: var(--c-hacer-soft); color: var(--c-hacer); border-color: color-mix(in srgb, var(--c-hacer) 35%, transparent) }
+.rep-hint { margin: 0; align-self: end; font-size: .8rem; color: var(--muted); padding-bottom: 10px }
+@media (max-width: 460px) { .rep-hint { padding: 0 } }
+.steps-ed { border: 1.5px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px 12px; margin: 0; display: grid; gap: 8px; min-width: 0 }
+.steps-ed legend { font-size: .8rem; font-weight: 700; color: var(--muted); padding: 0 4px }
+.steps-ed ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px }
+.steps-ed li { display: flex; gap: 8px; align-items: center; min-width: 0 }
+.steps-ed li .field { flex: 1; min-width: 0; min-height: 38px; padding: 6px 10px }
+.steps-ed li .x { border: 1.5px solid var(--line); background: var(--surface); border-radius: 10px; width: 38px; height: 38px; color: var(--muted); flex: none }
+.steps-add { display: flex; gap: 8px } .steps-add .field { flex: 1; min-width: 0 }
+/* Esperando y seguimiento */
+.wait { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between }
+.wait.late { background: var(--danger-soft); color: var(--danger); border: 1.5px solid var(--danger) }
+.follow { border: 1.5px solid currentColor; background: var(--surface); color: inherit; border-radius: 10px; padding: 6px 10px; font-weight: 800; font-size: .8rem }
+.follow-box { border: 1.5px solid var(--danger); border-radius: var(--radius); padding: 14px 16px; background: var(--surface); box-shadow: var(--shadow); display: grid; gap: 8px }
+.follow-box h2 { margin: 0; font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; color: var(--danger); font-weight: 800 }
+.follow-box ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px }
+.follow-box li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; padding: 8px 10px; border: 1.5px solid var(--line); border-radius: var(--radius-sm) }
+.follow-box li .who { min-width: 0; overflow-wrap: anywhere; font-weight: 700 }
+.follow-box li .who small { display: block; color: var(--muted); font-weight: 600 }
+.follow-box .follow { color: var(--danger) }
+.follow-box li .who { background: none; border: 0; padding: 0; text-align: left; color: var(--fg); flex: 1 1 160px }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="top">
-    <div>
+    <div class="hello">
+      <p class="greet" id="greet">Hola</p>
       <h1>Pendientes</h1>
       <p class="sub" id="today">&nbsp;</p>
       <p class="sync" id="syncBar" hidden><span class="dot" id="syncState"></span><span id="syncText"></span> · <span id="syncEmail"></span> <button class="link" type="button" id="logoutBtn">Cerrar sesión</button></p>
     </div>
     <div class="topbtns">
-      <button class="btn" id="instBtn" type="button" hidden>Instalar app</button>
-      <button class="btn" id="syncBtn" type="button" hidden>Sincronizar</button>
-      <button class="btn" id="impBtn" type="button">Importar</button>
-      <button class="btn" id="expBtn" type="button">Exportar copia</button>
-      <button class="btn primary" id="addBtn" type="button">+ Nueva tarea</button>
+      <button class="btn ghost" id="instBtn" type="button" hidden>Instalar app</button>
+      <button class="btn ghost" id="syncBtn" type="button" hidden>Sincronizar</button>
+      <button class="btn add" id="addBtn" type="button" aria-label="Nueva tarea"><span class="plus">+</span><span class="lbl">Nueva tarea</span></button>
     </div>
   </header>
 
@@ -212,6 +385,11 @@ textarea.field { resize: vertical; min-height: 60px }
     <ol id="top3"></ol>
   </section>
 
+  <section class="follow-box" id="followBox" hidden aria-labelledby="fuh">
+    <h2 id="fuh">Hacer seguimiento</h2>
+    <ul id="followList"></ul>
+  </section>
+
   <div class="filters">
     <input class="field" type="search" id="q" placeholder="Buscar tarea, site o persona" aria-label="Buscar">
     <select class="field" id="fProj" aria-label="Filtrar por proyecto"><option value="">Todos los proyectos</option></select>
@@ -221,6 +399,14 @@ textarea.field { resize: vertical; min-height: 60px }
 
   <div class="tabs" role="tablist" id="tabs"></div>
   <div class="board" id="board"></div>
+
+  <footer class="foot">
+    <span>Copia de seguridad</span>
+    <div class="footbtns">
+      <button class="btn" id="expBtn" type="button">⬇︎ Exportar</button>
+      <button class="btn" id="impBtn" type="button">⬆︎ Importar</button>
+    </div>
+  </footer>
 </div>
 
 <dialog id="dlg">
@@ -245,11 +431,25 @@ textarea.field { resize: vertical; min-height: 60px }
       </label>
     </div>
     <div class="row">
+      <label class="lb">Se repite
+        <select class="field" id="f_repite"><option value="">No se repite</option><option value="diaria">Cada día</option><option value="semanal">Cada semana</option><option value="quincenal">Cada 15 días</option><option value="mensual">Cada mes</option></select>
+      </label>
+      <p class="rep-hint">Al marcarla como Hecho, se crea sola la siguiente.</p>
+    </div>
+    <div class="row">
       <label class="lb">Estado
         <select class="field" id="f_estado"><option value="hacer">Por hacer</option><option value="curso">En curso</option><option value="espera">Esperando respuesta</option><option value="hecho">Hecho</option></select>
       </label>
       <label class="lb">Esperando a<input class="field" id="f_esperaDe" maxlength="80" placeholder="Área o persona"></label>
     </div>
+    <fieldset class="steps-ed">
+      <legend>Pasos <span id="stepsCount"></span></legend>
+      <ul id="stepsEd"></ul>
+      <div class="steps-add">
+        <input class="field" id="stepNew" maxlength="120" placeholder="Agregar un paso, ej. Drive test" enterkeyhint="done">
+        <button class="btn" type="button" id="stepAddBtn">Agregar</button>
+      </div>
+    </fieldset>
     <label class="lb">Siguiente acción<textarea class="field" id="f_siguiente" maxlength="400" placeholder="Lo próximo concreto que hay que hacer"></textarea></label>
     <label class="ck"><input type="checkbox" id="f_top3"> Es parte de mi Top 3 de hoy</label>
     <div class="confirm" id="confirmDel" hidden>¿Eliminar esta tarea? <button class="btn danger solid" type="button" id="delYes">Eliminar</button><button class="btn" type="button" id="delNo">No</button></div>
