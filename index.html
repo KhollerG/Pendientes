@@ -342,6 +342,17 @@ label.lb { font-weight: 700 }
 .follow-box li .who small { display: block; color: var(--muted); font-weight: 600 }
 .follow-box .follow { color: var(--danger) }
 .follow-box li .who { background: none; border: 0; padding: 0; text-align: left; color: var(--fg); flex: 1 1 160px }
+
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 14px; padding: 4px }
+.seg label { display: block; cursor: pointer }
+.seg input { position: absolute; opacity: 0; pointer-events: none }
+.seg span { display: block; text-align: center; padding: 9px 6px; border-radius: 10px; font-weight: 800; color: var(--muted) }
+.seg input:checked + span { background: var(--surface); color: var(--accent); box-shadow: var(--shadow); outline: 1.5px solid var(--accent) }
+.seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px }
+.chip.reu { background: var(--c-curso-soft); color: var(--c-curso); border-color: color-mix(in srgb, var(--c-curso) 35%, transparent) }
+
+.espera-row { border: 1.5px dashed var(--c-espera); border-radius: var(--radius-sm); padding: 10px; background: var(--c-espera-soft) }
+.espera-row.dim { border-color: var(--line); background: none; opacity: .6 }
 </style>
 </head>
 <body>
@@ -412,35 +423,46 @@ label.lb { font-weight: 700 }
 <dialog id="dlg">
   <form id="frm" method="dialog">
     <h3 id="dlgTitle">Nueva tarea</h3>
-    <label class="lb">Tarea<input class="field" id="f_titulo" required maxlength="200" placeholder="Ej. Enviar informe de drive test"></label>
+    <div class="seg" role="radiogroup" aria-label="Tipo">
+      <label><input type="radio" name="tipo" id="tipoTarea" value="tarea" checked><span>✓ Tarea</span></label>
+      <label><input type="radio" name="tipo" id="tipoReu" value="reunion"><span>👥 Reunión</span></label>
+    </div>
+    <label class="lb">Título<input class="field" id="f_titulo" required maxlength="200" placeholder="Ej. Enviar informe de drive test"></label>
     <div class="row">
       <label class="lb">Proyecto / site<input class="field" id="f_proyecto" list="projList" maxlength="80" placeholder="Ej. Sites 5G Lima Norte"></label>
       <label class="lb">Solicitante<input class="field" id="f_solicitante" maxlength="80" placeholder="¿Quién lo pidió?"></label>
     </div>
     <datalist id="projList"></datalist>
     <div class="row">
-      <label class="lb">Fecha límite<input class="field" type="date" id="f_vence"></label>
+      <label class="lb"><span id="lbFecha">Fecha límite</span><input class="field" type="date" id="f_vence"></label>
+      <label class="lb"><span id="lbHora">Hora límite (opcional)</span><input class="field" type="time" id="f_hora"></label>
+    </div>
+    <div class="row">
+      <label class="lb">Duración en el calendario
+        <select class="field" id="f_dur"><option value="15">15 min</option><option value="30" selected>30 min</option><option value="45">45 min</option><option value="60">1 hora</option><option value="90">1 h 30 min</option><option value="120">2 horas</option><option value="180">3 horas</option><option value="240">4 horas</option></select>
+      </label>
+      <label class="lb">Avisarme
+        <select class="field" id="f_avisoMin"><option value="0">A la hora</option><option value="10">10 min antes</option><option value="15">15 min antes</option><option value="30">30 min antes</option><option value="60">1 hora antes</option><option value="120">2 horas antes</option><option value="240">4 horas antes</option><option value="1440">1 día antes</option><option value="2880">2 días antes</option></select>
+      </label>
+    </div>
+    <div class="row">
       <label class="lb">Prioridad
         <select class="field" id="f_prioridad"><option value="3">Alta</option><option value="2" selected>Media</option><option value="1">Baja</option></select>
       </label>
-    </div>
-    <div class="row">
-      <label class="lb">Hora del aviso<input class="field" type="time" id="f_hora" value="09:00"></label>
-      <label class="lb">Avisarme
-        <select class="field" id="f_aviso"><option value="0">A esa hora</option><option value="1">1 día antes y a esa hora</option><option value="2">2 días antes y a esa hora</option></select>
-      </label>
-    </div>
-    <div class="row">
       <label class="lb">Se repite
         <select class="field" id="f_repite"><option value="">No se repite</option><option value="diaria">Cada día</option><option value="semanal">Cada semana</option><option value="quincenal">Cada 15 días</option><option value="mensual">Cada mes</option></select>
       </label>
-      <p class="rep-hint">Al marcarla como Hecho, se crea sola la siguiente.</p>
     </div>
     <div class="row">
       <label class="lb">Estado
         <select class="field" id="f_estado"><option value="hacer">Por hacer</option><option value="curso">En curso</option><option value="espera">Esperando respuesta</option><option value="hecho">Hecho</option></select>
       </label>
+    </div>
+    <div class="row espera-row" id="esperaRow">
       <label class="lb">Esperando a<input class="field" id="f_esperaDe" maxlength="80" placeholder="Área o persona"></label>
+      <label class="lb">Hacer seguimiento en
+        <select class="field" id="f_segDias"><option value="1">1 día</option><option value="2">2 días</option><option value="3" selected>3 días</option><option value="5">5 días</option><option value="7">1 semana</option><option value="10">10 días</option><option value="14">2 semanas</option><option value="30">1 mes</option></select>
+      </label>
     </div>
     <fieldset class="steps-ed">
       <legend>Pasos <span id="stepsCount"></span></legend>
@@ -470,7 +492,7 @@ label.lb { font-weight: 700 }
     <p class="calinfo" id="calInfo"></p>
     <button class="btn primary" type="button" id="calIcs">Calendario del iPhone / Outlook</button>
     <button class="btn" type="button" id="calGoogle">Google Calendar</button>
-    <p class="calnote">Si después cambias la fecha, vuelve a agregarla y borra el evento anterior del calendario.</p>
+    <p class="calnote">Google Calendar usa su propio aviso (normalmente 30 min antes). Si después cambias la fecha u hora, vuelve a agregarla y borra el evento anterior.</p>
     <button class="btn" type="button" id="calClose">Cerrar</button>
   </form>
 </dialog>

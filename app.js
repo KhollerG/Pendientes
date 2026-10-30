@@ -66,7 +66,8 @@ function saveLocal() {
 function cloudRef(id) { return fb.doc(fb.db, "users", user.uid, "tareas", id); }
 
 const REPITE = { diaria: "Diaria", semanal: "Semanal", quincenal: "Cada 15 días", mensual: "Mensual" };
-const ESPERA_ALERTA = 3; // días en espera antes de sugerir seguimiento
+const ESPERA_ALERTA = 3; // plazo de seguimiento por defecto (días)
+const plazo = t => +t.segDias || ESPERA_ALERTA;
 
 function nextDate(fecha, repite) {
   const d = new Date((fecha || todayStr()) + "T12:00:00");
@@ -341,7 +342,7 @@ function render() {
   }));
 
   // Seguimientos pendientes
-  const late = tasks.filter(t => t.estado === "espera" && diasEsperando(t) >= ESPERA_ALERTA)
+  const late = tasks.filter(t => t.estado === "espera" && diasEsperando(t) >= plazo(t))
     .sort((x, y) => diasEsperando(y) - diasEsperando(x));
   $("#followBox").hidden = !late.length;
   $("#followList").replaceChildren(...late.map(t => {
@@ -390,7 +391,8 @@ function card(t) {
   const bars = el("span", "bars p" + p); bars.title = "Prioridad " + PRIO[p]; bars.setAttribute("aria-label", "Prioridad " + PRIO[p]);
   bars.append(el("i"), el("i"), el("i")); meta.append(bars);
   if (t.proyecto) meta.append(el("span", "chip proj", t.proyecto));
-  if (t.vence) meta.append(el("span", "chip date " + ds, (ds === "overdue" ? "Venció " : ds === "today" ? "Hoy · " : "") + fmtDate(t.vence)));
+  if (t.tipo === "reunion") meta.append(el("span", "chip reu", "👥 Reunión"));
+  if (t.vence) meta.append(el("span", "chip date " + ds, (ds === "overdue" ? "Venció " : ds === "today" ? "Hoy · " : "") + fmtDate(t.vence) + (t.hora ? " · " + t.hora : "")));
   if (t.repite && REPITE[t.repite]) meta.append(el("span", "chip rep", "↻ " + REPITE[t.repite]));
   if (t.solicitante) meta.append(el("span", "chip", "Pidió: " + t.solicitante));
   c.append(meta);
@@ -426,9 +428,10 @@ function card(t) {
   // Esperando respuesta: días y seguimiento
   if (t.estado === "espera") {
     const dias = diasEsperando(t);
-    const late = dias >= ESPERA_ALERTA;
+    const pl = plazo(t), late = dias >= pl, falta = pl - dias;
     const w = el("div", "wait" + (late ? " late" : ""));
-    const txt = el("span", "", (t.esperaDe ? "Esperando a " + t.esperaDe : "Esperando respuesta") + " · " + (dias === 0 ? "desde hoy" : "hace " + dias + " día" + (dias > 1 ? "s" : "")));
+    const txt = el("span", "", (t.esperaDe ? "Esperando a " + t.esperaDe : "Esperando respuesta") + " · " + (dias === 0 ? "desde hoy" : "hace " + dias + " día" + (dias > 1 ? "s" : ""))
+      + (late ? "" : " · seguimiento " + (falta === 1 ? "mañana" : "en " + falta + " días")));
     w.append(txt);
     if (late) {
       const fb2 = el("button", "follow", "Copiar mensaje de seguimiento"); fb2.type = "button";
@@ -490,6 +493,11 @@ function move(t, estado) {
   const n = { ...t, estado };
   if (estado === "hecho") n.top3 = false;
   writeTask(n);
+  if (estado === "espera" && t.estado !== "espera") {
+    const saved = tasks.find(x => x.id === n.id) || n;
+    openDlg(saved); setTimeout(() => $("#f_esperaDe").focus(), 60);
+    toast("¿A quién esperas y en cuántos días haces seguimiento?");
+  }
   if (estado === "hecho") toast("¡Hecho! " + (t.titulo || ""));
 }
 function toggleTop3(t) {
@@ -503,11 +511,18 @@ function toggleTop3(t) {
 let calTask = null;
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
+const AVISO_TXT = { 0: "a la hora", 10: "10 min antes", 15: "15 min antes", 30: "30 min antes", 60: "1 hora antes", 120: "2 horas antes", 240: "4 horas antes", 1440: "1 día antes", 2880: "2 días antes" };
+const durTxt = m => m < 60 ? m + " min" : (m % 60 ? Math.floor(m / 60) + " h " + (m % 60) + " min" : (m / 60) + (m === 60 ? " hora" : " horas"));
+// Minutos de anticipación del aviso (compatibilidad con la versión anterior, que guardaba días)
+function avisoMin(t) {
+  if (t.avisoMin != null && t.avisoMin !== "") return +t.avisoMin || 0;
+  return (+t.aviso || 0) * 1440;
+}
 function calTimes(t) {
   const hora = /^\d\d:\d\d$/.test(t.hora || "") ? t.hora : "09:00";
   const [h, m] = hora.split(":").map(Number);
   const start = new Date(t.vence + "T00:00:00"); start.setHours(h, m, 0, 0);
-  const end = new Date(start.getTime() + 30 * 60000);
+  const end = new Date(start.getTime() + (+t.dur || 30) * 60000);
   const f = d => d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + "T" + pad(d.getHours()) + pad(d.getMinutes()) + "00";
   return { start: f(start), end: f(end), hora };
 }
@@ -538,12 +553,10 @@ function buildIcs(t) {
     "DTSTAMP:" + z,
     "DTSTART:" + start,
     "DTEND:" + end,
-    "SUMMARY:" + icsEsc(t.titulo),
+    "SUMMARY:" + icsEsc((t.tipo === "reunion" ? "Reunión: " : "") + t.titulo),
     "DESCRIPTION:" + icsEsc(calDetails(t)),
-    ...alarm("-PT0M"),
+    ...alarm("-PT" + avisoMin(t) + "M"),
   ];
-  const dias = +t.aviso || 0;
-  if (dias > 0) lines.push(...alarm("-P" + dias + "D"));
   lines.push("END:VEVENT", "END:VCALENDAR");
   return lines.map(icsFold).join("\r\n") + "\r\n";
 }
@@ -554,9 +567,8 @@ function openCal(t) {
   if (!t.vence) { toast("Ponle una fecha límite para poder agregarla al calendario."); return; }
   calTask = t;
   const { hora } = calTimes(t);
-  const dias = +t.aviso || 0;
-  const info = $("#calInfo"); info.replaceChildren(t.titulo || "(sin título)");
-  info.append(el("small", "", fmtDate(t.vence) + " · " + hora + " · aviso " + (dias ? dias + " día" + (dias > 1 ? "s" : "") + " antes y " : "") + "a la hora"));
+  const info = $("#calInfo"); info.replaceChildren((t.tipo === "reunion" ? "Reunión: " : "") + (t.titulo || "(sin título)"));
+  info.append(el("small", "", fmtDate(t.vence) + " · " + hora + (t.hora ? "" : " (sin hora, se usa 9:00)") + " · " + durTxt(+t.dur || 30) + " · aviso " + (AVISO_TXT[avisoMin(t)] || avisoMin(t) + " min antes")));
   $("#calDlg").showModal();
 }
 function calIcs() {
@@ -577,7 +589,7 @@ function calIcs() {
 function calGoogle() {
   const { start, end } = calTimes(calTask);
   const u = "https://calendar.google.com/calendar/render?action=TEMPLATE"
-    + "&text=" + encodeURIComponent(calTask.titulo)
+    + "&text=" + encodeURIComponent((calTask.tipo === "reunion" ? "Reunión: " : "") + calTask.titulo)
     + "&dates=" + start + "/" + end
     + "&details=" + encodeURIComponent(calDetails(calTask))
     + "&ctz=" + encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Lima");
@@ -617,7 +629,7 @@ function addStep() {
 }
 $("#stepAddBtn").onclick = addStep;
 $("#stepNew").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addStep(); } });
-const F = ["titulo","proyecto","solicitante","vence","prioridad","estado","esperaDe","siguiente","hora","aviso","repite"];
+const F = ["titulo","proyecto","solicitante","vence","prioridad","estado","esperaDe","siguiente","hora","repite","segDias"];
 let draftSteps = [];
 function openDlg(t) {
   editingId = t ? t.id : null;
@@ -626,8 +638,15 @@ function openDlg(t) {
   $("#f_prioridad").value = String(t ? (t.prioridad || 2) : 2);
   $("#f_estado").value = t ? (t.estado || "hacer") : (activeTab || "hacer");
   $("#f_top3").checked = !!(t && t.top3);
-  $("#f_hora").value = (t && t.hora) || "09:00";
-  $("#f_aviso").value = String((t && t.aviso) || 0);
+  $("#f_hora").value = (t && t.hora) || "";
+  $("#f_dur").value = String((t && t.dur) || 30);
+  $("#f_segDias").value = String(t ? plazo(t) : ESPERA_ALERTA);
+  if (!$("#f_segDias").value) $("#f_segDias").value = String(ESPERA_ALERTA);
+  esperaFields();
+  $("#f_avisoMin").value = String(t ? avisoMin(t) : 0);
+  if (!$("#f_avisoMin").value) $("#f_avisoMin").value = "0";
+  (t && t.tipo === "reunion" ? $("#tipoReu") : $("#tipoTarea")).checked = true;
+  tipoLabels();
   draftSteps = (t && Array.isArray(t.checklist) ? t.checklist : []).map(x => ({ ...x }));
   $("#stepNew").value = ""; renderSteps();
   $("#delBtn").hidden = !t;
@@ -640,6 +659,22 @@ $("#cancelBtn").onclick = () => $("#dlg").close();
 $("#delBtn").onclick = () => { $("#confirmDel").hidden = false; };
 $("#delNo").onclick = () => { $("#confirmDel").hidden = true; };
 $("#delYes").onclick = () => { if (editingId) removeTask(editingId); $("#dlg").close(); toast("Tarea eliminada"); };
+function tipoLabels() {
+  const reu = $("#tipoReu").checked;
+  $("#dlgTitle").textContent = (editingId ? "Editar " : "Nueva ") + (reu ? "reunión" : "tarea");
+  $("#lbFecha").textContent = reu ? "Fecha de la reunión" : "Fecha límite";
+  $("#lbHora").textContent = reu ? "Hora de inicio" : "Hora límite (opcional)";
+  $("#f_titulo").placeholder = reu ? "Ej. Reunión de avance con proyectos" : "Ej. Enviar informe de drive test";
+  if (reu && $("#f_dur").value === "30" && !editingId) $("#f_dur").value = "60";
+  if (reu && $("#f_avisoMin").value === "0" && !editingId) $("#f_avisoMin").value = "15";
+}
+function esperaFields() {
+  const on = $("#f_estado").value === "espera";
+  $("#esperaRow").classList.toggle("dim", !on);
+}
+$("#f_estado").addEventListener("change", () => { esperaFields(); if ($("#f_estado").value === "espera") $("#f_esperaDe").focus(); });
+$("#tipoTarea").addEventListener("change", tipoLabels);
+$("#tipoReu").addEventListener("change", tipoLabels);
 $("#calSaveBtn").onclick = () => {
   if (!$("#f_titulo").value.trim()) { $("#f_titulo").focus(); return; }
   if (!$("#f_vence").value) { toast("Ponle una fecha límite para agregarla al calendario."); $("#f_vence").focus(); return; }
@@ -652,7 +687,11 @@ function saveForm() {
   const n = { ...base };
   for (const f of F) n[f] = $("#f_" + f).value.trim();
   n.prioridad = +n.prioridad || 2;
-  n.aviso = +n.aviso || 0;
+  n.tipo = $("#tipoReu").checked ? "reunion" : "tarea";
+  n.dur = +$("#f_dur").value || 30;
+  n.segDias = +n.segDias || ESPERA_ALERTA;
+  n.avisoMin = +$("#f_avisoMin").value || 0;
+  delete n.aviso;
   syncDraftSteps();
   n.checklist = draftSteps.filter(x => x.t.trim()).map(x => ({ t: x.t.trim(), ok: !!x.ok }));
   n.top3 = $("#f_top3").checked && n.estado !== "hecho";
@@ -660,8 +699,8 @@ function saveForm() {
   if (n.top3 && !base.top3 && tasks.filter(x => x.top3 && x.estado !== "hecho" && x.id !== n.id).length >= 3) {
     n.top3 = false; toast("Guardada sin ★: ya tienes 3 prioridades hoy.");
   }
-  writeTask(n);
   activeTab = n.estado;
+  writeTask(n);
   $("#dlg").close();
   return n;
 }
