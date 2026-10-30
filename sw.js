@@ -1,6 +1,6 @@
 // Permite que la app abra sin internet.
 // Si cambias algún archivo, sube el número de versión (pendientes-v3, v4…).
-const CACHE = "pendientes-v2";
+const CACHE = "pendientes-v3";
 const SHELL = ["./", "./index.html", "./app.js", "./firebase-config.js", "./manifest.webmanifest",
   "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png"];
 

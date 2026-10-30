@@ -161,6 +161,13 @@ textarea.field { resize: vertical; min-height: 60px }
 .authmsg { grid-column: 1 / -1; margin: 0; color: var(--danger) !important; min-height: 1em }
 .authmsg:empty { display: none }
 @media (max-width: 520px) { .authform { grid-template-columns: 1fr } }
+
+.btn.cal { justify-self: start; border-color: var(--accent); color: var(--accent) }
+.calform { padding: 18px; display: grid; gap: 10px }
+.calform h3 { margin: 0; font-size: 1.1rem }
+.calinfo { margin: 0; font-weight: 600; overflow-wrap: anywhere }
+.calinfo small { display: block; font-weight: 400; color: var(--muted); font-family: var(--f-mono); margin-top: 2px }
+.calnote { margin: 0; font-size: .82rem; color: var(--muted) }
 </style>
 </head>
 <body>
@@ -232,6 +239,12 @@ textarea.field { resize: vertical; min-height: 60px }
       </label>
     </div>
     <div class="row">
+      <label class="lb">Hora del aviso<input class="field" type="time" id="f_hora" value="09:00"></label>
+      <label class="lb">Avisarme
+        <select class="field" id="f_aviso"><option value="0">A esa hora</option><option value="1">1 día antes y a esa hora</option><option value="2">2 días antes y a esa hora</option></select>
+      </label>
+    </div>
+    <div class="row">
       <label class="lb">Estado
         <select class="field" id="f_estado"><option value="hacer">Por hacer</option><option value="curso">En curso</option><option value="espera">Esperando respuesta</option><option value="hecho">Hecho</option></select>
       </label>
@@ -240,6 +253,7 @@ textarea.field { resize: vertical; min-height: 60px }
     <label class="lb">Siguiente acción<textarea class="field" id="f_siguiente" maxlength="400" placeholder="Lo próximo concreto que hay que hacer"></textarea></label>
     <label class="ck"><input type="checkbox" id="f_top3"> Es parte de mi Top 3 de hoy</label>
     <div class="confirm" id="confirmDel" hidden>¿Eliminar esta tarea? <button class="btn danger solid" type="button" id="delYes">Eliminar</button><button class="btn" type="button" id="delNo">No</button></div>
+    <button class="btn cal" type="button" id="calSaveBtn">📅 Guardar y agregar al calendario</button>
     <div class="dlg-foot">
       <button class="btn danger" type="button" id="delBtn">Eliminar</button>
       <div class="r">
@@ -247,6 +261,17 @@ textarea.field { resize: vertical; min-height: 60px }
         <button class="btn primary" type="submit">Guardar</button>
       </div>
     </div>
+  </form>
+</dialog>
+
+<dialog id="calDlg">
+  <form method="dialog" class="calform">
+    <h3>Agregar al calendario</h3>
+    <p class="calinfo" id="calInfo"></p>
+    <button class="btn primary" type="button" id="calIcs">Calendario del iPhone / Outlook</button>
+    <button class="btn" type="button" id="calGoogle">Google Calendar</button>
+    <p class="calnote">Si después cambias la fecha, vuelve a agregarla y borra el evento anterior del calendario.</p>
+    <button class="btn" type="button" id="calClose">Cerrar</button>
   </form>
 </dialog>
 <div class="toast" id="toast" hidden></div>

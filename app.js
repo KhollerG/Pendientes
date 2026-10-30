@@ -350,7 +350,12 @@ function card(t) {
   const i = COLS.findIndex(x => x.id === (t.estado || "hacer"));
   if (i > 0) { const b = el("button", "icon", "← " + short(COLS[i-1].id)); b.type = "button"; b.onclick = () => move(t, COLS[i-1].id); mv.append(b); }
   if (i < COLS.length - 1) { const b = el("button", "icon", short(COLS[i+1].id) + " →"); b.type = "button"; b.onclick = () => move(t, COLS[i+1].id); mv.append(b); }
-  a.append(star, mv); c.append(a);
+  const left = el("div", "mv"); left.append(star);
+  if (t.vence && t.estado !== "hecho") {
+    const cal = el("button", "icon", "📅"); cal.type = "button"; cal.title = "Agregar al calendario"; cal.setAttribute("aria-label", "Agregar al calendario");
+    cal.onclick = () => openCal(t); left.append(cal);
+  }
+  a.append(left, mv); c.append(a);
   return c;
 }
 const short = id => ({ hacer: "Por hacer", curso: "En curso", espera: "Esperando", hecho: "Hecho" })[id];
@@ -368,8 +373,97 @@ function toggleTop3(t) {
   writeTask({ ...t, top3: !t.top3 });
 }
 
+/* ---------- Calendario ---------- */
+let calTask = null;
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+function calTimes(t) {
+  const hora = /^\d\d:\d\d$/.test(t.hora || "") ? t.hora : "09:00";
+  const [h, m] = hora.split(":").map(Number);
+  const start = new Date(t.vence + "T00:00:00"); start.setHours(h, m, 0, 0);
+  const end = new Date(start.getTime() + 30 * 60000);
+  const f = d => d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + "T" + pad(d.getHours()) + pad(d.getMinutes()) + "00";
+  return { start: f(start), end: f(end), hora };
+}
+function calDetails(t) {
+  const parts = [];
+  if (t.proyecto) parts.push("Proyecto: " + t.proyecto);
+  if (t.solicitante) parts.push("Pidió: " + t.solicitante);
+  if (t.siguiente) parts.push("Siguiente: " + t.siguiente);
+  parts.push("Prioridad: " + PRIO[+t.prioridad || 2]);
+  return parts.join("\n");
+}
+const icsEsc = s => String(s).replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+function icsFold(line) {
+  const out = []; let cur = "";
+  for (const ch of line) {
+    if (new TextEncoder().encode(cur + ch).length > 73) { out.push(cur); cur = " " + ch; } else cur += ch;
+  }
+  out.push(cur); return out.join("\r\n");
+}
+function buildIcs(t) {
+  const { start, end } = calTimes(t);
+  const now = new Date(), z = now.toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
+  const alarm = trig => ["BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + icsEsc(t.titulo), "TRIGGER:" + trig, "END:VALARM"];
+  const lines = [
+    "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Pendientes//ES", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    "UID:" + t.id + "@pendientes",
+    "DTSTAMP:" + z,
+    "DTSTART:" + start,
+    "DTEND:" + end,
+    "SUMMARY:" + icsEsc(t.titulo),
+    "DESCRIPTION:" + icsEsc(calDetails(t)),
+    ...alarm("-PT0M"),
+  ];
+  const dias = +t.aviso || 0;
+  if (dias > 0) lines.push(...alarm("-P" + dias + "D"));
+  lines.push("END:VEVENT", "END:VCALENDAR");
+  return lines.map(icsFold).join("\r\n") + "\r\n";
+}
+function fileName(t) {
+  return (t.titulo || "tarea").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w]+/g, "-").replace(/^-|-$/g, "").slice(0, 40).toLowerCase() + ".ics";
+}
+function openCal(t) {
+  if (!t.vence) { toast("Ponle una fecha límite para poder agregarla al calendario."); return; }
+  calTask = t;
+  const { hora } = calTimes(t);
+  const dias = +t.aviso || 0;
+  const info = $("#calInfo"); info.replaceChildren(t.titulo || "(sin título)");
+  info.append(el("small", "", fmtDate(t.vence) + " · " + hora + " · aviso " + (dias ? dias + " día" + (dias > 1 ? "s" : "") + " antes y " : "") + "a la hora"));
+  $("#calDlg").showModal();
+}
+function calIcs() {
+  const ics = buildIcs(calTask);
+  if (isIOS) {
+    // En iPhone, abrir el evento directamente muestra "Agregar al calendario".
+    location.href = "data:text/calendar;charset=utf-8," + encodeURIComponent(ics);
+  } else {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
+    a.download = fileName(calTask);
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast("Abre el archivo descargado para agregarlo a tu calendario");
+  }
+  $("#calDlg").close();
+}
+function calGoogle() {
+  const { start, end } = calTimes(calTask);
+  const u = "https://calendar.google.com/calendar/render?action=TEMPLATE"
+    + "&text=" + encodeURIComponent(calTask.titulo)
+    + "&dates=" + start + "/" + end
+    + "&details=" + encodeURIComponent(calDetails(calTask))
+    + "&ctz=" + encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Lima");
+  window.open(u, "_blank", "noopener");
+  $("#calDlg").close();
+}
+$("#calIcs").onclick = calIcs;
+$("#calGoogle").onclick = calGoogle;
+$("#calClose").onclick = () => $("#calDlg").close();
+
 /* ---------- Diálogo ---------- */
-const F = ["titulo","proyecto","solicitante","vence","prioridad","estado","esperaDe","siguiente"];
+const F = ["titulo","proyecto","solicitante","vence","prioridad","estado","esperaDe","siguiente","hora","aviso"];
 function openDlg(t) {
   editingId = t ? t.id : null;
   $("#dlgTitle").textContent = t ? "Editar tarea" : "Nueva tarea";
@@ -377,6 +471,8 @@ function openDlg(t) {
   $("#f_prioridad").value = String(t ? (t.prioridad || 2) : 2);
   $("#f_estado").value = t ? (t.estado || "hacer") : (activeTab || "hacer");
   $("#f_top3").checked = !!(t && t.top3);
+  $("#f_hora").value = (t && t.hora) || "09:00";
+  $("#f_aviso").value = String((t && t.aviso) || 0);
   $("#delBtn").hidden = !t;
   $("#confirmDel").hidden = true;
   $("#dlg").showModal();
@@ -387,21 +483,29 @@ $("#cancelBtn").onclick = () => $("#dlg").close();
 $("#delBtn").onclick = () => { $("#confirmDel").hidden = false; };
 $("#delNo").onclick = () => { $("#confirmDel").hidden = true; };
 $("#delYes").onclick = () => { if (editingId) removeTask(editingId); $("#dlg").close(); toast("Tarea eliminada"); };
-$("#frm").addEventListener("submit", e => {
-  e.preventDefault();
+$("#calSaveBtn").onclick = () => {
+  if (!$("#f_titulo").value.trim()) { $("#f_titulo").focus(); return; }
+  if (!$("#f_vence").value) { toast("Ponle una fecha límite para agregarla al calendario."); $("#f_vence").focus(); return; }
+  const n = saveForm();
+  if (n) openCal(n);
+};
+$("#frm").addEventListener("submit", e => { e.preventDefault(); saveForm(); });
+function saveForm() {
   const base = editingId ? (tasks.find(x => x.id === editingId) || {}) : { id: newId(), creado: Date.now() };
   const n = { ...base };
   for (const f of F) n[f] = $("#f_" + f).value.trim();
   n.prioridad = +n.prioridad || 2;
+  n.aviso = +n.aviso || 0;
   n.top3 = $("#f_top3").checked && n.estado !== "hecho";
-  if (!n.titulo) return;
+  if (!n.titulo) return null;
   if (n.top3 && !base.top3 && tasks.filter(x => x.top3 && x.estado !== "hecho" && x.id !== n.id).length >= 3) {
     n.top3 = false; toast("Guardada sin ★: ya tienes 3 prioridades hoy.");
   }
   writeTask(n);
   activeTab = n.estado;
   $("#dlg").close();
-});
+  return n;
+}
 
 $("#q").addEventListener("input", render);
 $("#fProj").addEventListener("change", render);
