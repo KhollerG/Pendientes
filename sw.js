@@ -1,11 +1,11 @@
 // Permite que la app abra sin internet.
-// Si cambias algún archivo, sube el número de versión (pendientes-v3, v4…).
-const CACHE = "pendientes-v7";
-const SHELL = ["./", "./index.html", "./app.js", "./firebase-config.js", "./manifest.webmanifest",
+// Si cambias algún archivo, sube el número de versión (pendientes-v9, v10…).
+const CACHE = "pendientes-v8";
+const SHELL = ["./", "./index.html", "./app.js?v=8", "./firebase-config.js", "./manifest.webmanifest",
   "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 self.addEventListener("activate", e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
@@ -18,10 +18,12 @@ self.addEventListener("fetch", e => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
 
-  // Archivos de la app: primero la red (para recibir cambios); sin internet, la copia guardada.
+  // Archivos de la app: siempre la versión más nueva del servidor; sin internet, la copia guardada.
   if (url.origin === location.origin) {
-    e.respondWith(fetch(req).then(r => r.ok ? put(req, r) : r)
-      .catch(() => caches.match(req, { ignoreSearch: true }).then(hit => hit || caches.match("./index.html"))));
+    const fresh = new Request(req.url, { cache: "no-cache", credentials: "same-origin" });
+    e.respondWith(fetch(fresh).then(r => r.ok ? put(req, r) : r)
+      .catch(() => caches.match(req).then(hit => hit || caches.match(req, { ignoreSearch: true }))
+        .then(hit => hit || caches.match("./index.html"))));
     return;
   }
   // Fuentes y librería de Firebase: primero la copia guardada.
@@ -30,5 +32,4 @@ self.addEventListener("fetch", e => {
   if (staticHost) {
     e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(r => (r.ok || r.type === "opaque") ? put(req, r) : r)));
   }
-  // Todo lo demás (la sincronización con Firebase) pasa directo, sin tocar.
 });

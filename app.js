@@ -1,5 +1,17 @@
 import { firebaseConfig } from "./firebase-config.js";
 
+// Si la página y este código son de versiones distintas (actualización a medias), recargar una vez.
+const APP_VERSION = "8";
+{
+  const pageV = document.querySelector('meta[name="app-version"]')?.content;
+  if (pageV !== APP_VERSION) {
+    let tried = false; try { tried = sessionStorage.getItem("recarga-version") === APP_VERSION; } catch (e) {}
+    if (!tried) { try { sessionStorage.setItem("recarga-version", APP_VERSION); } catch (e) {} location.reload(); }
+    else { document.body.insertAdjacentHTML("afterbegin", '<p style="margin:12px;padding:12px;border-radius:12px;background:#fbefd8;color:#7a4b00;font-weight:700">La app se está actualizando. Ciérrala y vuelve a abrirla en unos minutos.</p>'); }
+    throw new Error("Versión distinta, recargando");
+  }
+}
+
 const FB = "https://www.gstatic.com/firebasejs/10.12.2/";
 const COLS = [
   { id: "hacer", name: "Por hacer" },
